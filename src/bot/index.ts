@@ -40,9 +40,15 @@ export default class MoonForecastBot extends Client {
     this._init();
   }
 
+  private async _checkForecast() {
+  }
+
   // Initialize the forecast timer. Check every 10 seconds.
   private _createForecastInterval(): NodeJS.Timeout {
-    const interval = setInterval(() => {}, 10_000);
+    const interval = setInterval(
+      async () => await this._checkForecast(),
+      10_000,
+    );
 
     return interval;
   }

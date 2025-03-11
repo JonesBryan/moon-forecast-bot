@@ -10,6 +10,7 @@ import {
 import MoonForecastBot from '..';
 import { models } from '../../database';
 import { point } from '../../database/models/User';
+import { createForecast, formatForecast, setUserTimezone } from '../../lib';
 
 const command = new SlashCommandBuilder()
   .setName('setlocation')
@@ -90,9 +91,15 @@ const execute = async (
     }
   }
 
-  await interaction.reply(
-    `Your location has been set to ${locationArray[0]}, ${locationArray[1]}`,
-  );
+  // Generate a forecast to get user's timezone
+  // and show an instant forecast.
+  const forecast = await createForecast(coordinates);
+
+  await setUserTimezone(user, forecast.timezone);
+
+  const formattedForecast = formatForecast(forecast);
+
+  await interaction.reply(formattedForecast);
 };
 
 export { command, execute };

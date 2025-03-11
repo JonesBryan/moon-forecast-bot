@@ -6,9 +6,10 @@ export interface UserAttributes {
   id: number;
   discord_id: string;
   coordinates: point;
+  timezone_id: number;
 }
 
-type UserCreationAttributes = Optional<UserAttributes, 'id'>;
+type UserCreationAttributes = Optional<UserAttributes, 'id' | 'timezone_id'>;
 
 export class User
   extends Model<UserAttributes, UserCreationAttributes>
@@ -16,7 +17,8 @@ export class User
 {
   public id!: number;
   public discord_id!: string;
-  public coordinates: point;
+  public coordinates!: point;
+  public timezone_id!: number;
 }
 
 export function UserFactory(sequelize: Sequelize): void {
@@ -35,6 +37,9 @@ export function UserFactory(sequelize: Sequelize): void {
       },
       coordinates: {
         type: DataTypes.GEOMETRY('POINT', 4326),
+      },
+      timezone_id: {
+        type: DataTypes.INTEGER.UNSIGNED,
       },
     },
     {

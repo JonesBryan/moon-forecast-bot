@@ -30,6 +30,10 @@ const dbDatabase = process.env.DB_DATABASE;
 
 if (!dbDatabase) throw new Error('DB_DATABASE is undefined');
 
+const apiKey = process.env.API_KEY;
+
+if (!apiKey) throw new Error('API_KEY is undefined');
+
 export default {
   botToken,
   clientId,
@@ -39,5 +43,6 @@ export default {
     username: dbUser,
     password: dbPass,
     database: dbDatabase,
-  }
+  },
+  apiKey,
 };
