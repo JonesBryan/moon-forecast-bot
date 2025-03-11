@@ -74,6 +74,8 @@ export default class MoonForecastBot extends Client {
     await this.login(this._token);
   }
 
+  // Send the command list to Discord so it can update
+  // the list for every user.
   private async _updateCommands() {
     const rest = new REST().setToken(this._token);
 
