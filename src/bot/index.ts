@@ -9,8 +9,12 @@ import {
 } from 'discord.js';
 import config from '../config';
 import * as commands from './commands';
+import { Sequelize } from 'sequelize';
 
-type Command = (interaction: ChatInputCommandInteraction, bot: MoonForecastBot) => Promise<void>;
+type Command = (
+  interaction: ChatInputCommandInteraction,
+  bot: MoonForecastBot,
+) => Promise<void>;
 
 // A Discord bot that will send a weekly update on
 // the status of the moon for the user's location.
@@ -22,12 +26,16 @@ export default class MoonForecastBot extends Client {
 
   private _commands: Record<string, Command> = {};
 
-  constructor() {
+  private _sequelize: Sequelize;
+
+  constructor(sequelize: Sequelize) {
     super({
       intents: [],
     });
 
     this._token = config.botToken;
+
+    this._sequelize = sequelize;
 
     this._init();
   }
@@ -79,16 +87,14 @@ export default class MoonForecastBot extends Client {
   private async _updateCommands() {
     const rest = new REST().setToken(this._token);
 
-    const cmds = Object.entries(commands).map(([key, { command }]) => command.toJSON());
+    const cmds = Object.entries(commands).map(([key, { command }]) =>
+      command.toJSON(),
+    );
 
     // Register commands with discord.
-    await rest
-      .put(Routes.applicationCommands(config.clientId), {
-        body: cmds,
-      })
-      .catch((err) => {
-        console.dir(err, { depth: Infinity });
-      });
+    await rest.put(Routes.applicationCommands(config.clientId), {
+      body: cmds,
+    });
 
     // Convert commands to a map and store it.
     for (const [key, value] of Object.entries(commands)) {

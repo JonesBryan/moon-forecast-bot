@@ -1,3 +1,10 @@
 import MoonForecastBot from './bot';
+import { setup } from './database';
 
-const bot = new MoonForecastBot();
+(async () => {
+  const sequelize = await setup();
+
+  console.log('Sequelize connected');
+
+  const bot = new MoonForecastBot(sequelize);
+})();

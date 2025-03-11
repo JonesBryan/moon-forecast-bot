@@ -1,6 +1,2 @@
-import { command, execute } from './test';
-
-export const test = {
-  command,
-  execute,
-};
+export * as test from './test';
+export * as setlocation from './setlocation';
