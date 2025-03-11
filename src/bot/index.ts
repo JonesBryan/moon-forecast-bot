@@ -93,6 +93,8 @@ export default class MoonForecastBot extends Client {
     // Convert commands to a map and store it.
     for (const [key, value] of Object.entries(commands)) {
       this._commands[key] = value.execute;
+
+      console.log('Added command:', key);
     }
   }
 }
