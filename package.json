@@ -1,5 +1,5 @@
 {
-  "name": "",
+  "name": "moon-forecast-bot",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
