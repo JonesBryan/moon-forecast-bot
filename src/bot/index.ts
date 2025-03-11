@@ -10,6 +10,8 @@ import {
 import config from '../config';
 import * as commands from './commands';
 
+type Command = (interaction: ChatInputCommandInteraction, bot: MoonForecastBot) => Promise<void>;
+
 // A Discord bot that will send a weekly update on
 // the status of the moon for the user's location.
 export default class MoonForecastBot extends Client {
@@ -17,6 +19,8 @@ export default class MoonForecastBot extends Client {
   private _forecastInterval: NodeJS.Timeout;
 
   private _token: string;
+
+  private _commands: Record<string, Command> = {};
 
   constructor() {
     super({
@@ -40,9 +44,16 @@ export default class MoonForecastBot extends Client {
     // Ignore non-slash-command interactions.
     if (!interaction.isChatInputCommand()) return;
 
-    console.log('Interaction received: ', interaction);
+    const incomingCommand = interaction as ChatInputCommandInteraction;
 
-    await commands.test.execute(interaction as ChatInputCommandInteraction, this);
+    console.log('Interaction received:', incomingCommand);
+
+    const command = this._commands[incomingCommand.commandName];
+
+    console.log('Command name:', incomingCommand.commandName);
+    console.log('Found:', command !== undefined);
+
+    await command(incomingCommand, this);
   }
 
   // Start the bot.
@@ -68,6 +79,7 @@ export default class MoonForecastBot extends Client {
 
     const cmds = Object.entries(commands).map(([key, { command }]) => command.toJSON());
 
+    // Register commands with discord.
     await rest
       .put(Routes.applicationCommands(config.clientId), {
         body: cmds,
@@ -75,5 +87,10 @@ export default class MoonForecastBot extends Client {
       .catch((err) => {
         console.dir(err, { depth: Infinity });
       });
+
+    // Convert commands to a map and store it.
+    for (const [key, value] of Object.entries(commands)) {
+      this._commands[key] = value.execute;
+    }
   }
 }
