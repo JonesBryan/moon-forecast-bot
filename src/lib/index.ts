@@ -4,32 +4,38 @@ import { EmbedBuilder, InteractionReplyOptions } from 'discord.js';
 import { Timezone } from '../database/models/Timezone';
 import config from '../config';
 
+interface DayData {
+  datetime: string;
+  cloudcover: number;
+  moonphase: number;
+  moonrise?: string;
+  moonset?: string;
+  sunrise: string;
+  sunset: string;
+
+  hours: {
+    datetime: string;
+    cloudcover: number;
+  }[];
+}
+
 interface ResponseData {
   latitude: number;
   longitude: number;
   timezone: string;
   tzOffset: number;
 
-  days: {
-    datetime: string;
-    cloudcover: number;
-    moonphase: number;
-    moonrise: string;
-    moonset: string;
-
-    hours: {
-      datetime: string;
-      cloudcover: number;
-    }[];
-  }[];
+  days: DayData[];
 }
 
 const base_url =
   'https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline';
 
 const include = 'days,hours';
-const elements = 'moonrise,moonset,moonphase,cloudcover,datetime';
+const elements =
+  'moonrise,moonset,moonphase,cloudcover,datetime,sunrise,sunset';
 
+// Get the forecase data from the API.
 export const createForecast = async (coordinates: point) => {
   const [lat, long] = coordinates.coordinates;
 
@@ -49,12 +55,128 @@ export const createForecast = async (coordinates: point) => {
 export const formatForecast = (
   forecast: ResponseData,
 ): InteractionReplyOptions => {
-  const message: InteractionReplyOptions = {};
+  // 7-day forecast, grab extra day for calculations.
+  const data = forecast.days.slice(0, 8);
 
-  const embed = new EmbedBuilder();
+  const days = data
+    .map((day, index, arr) => {
+      if (index === 7) return '';
 
-  return {};
+      const dateStr = new Date(day.datetime).toLocaleDateString('en-US', {
+        timeZone: 'UTC',
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+      const moonPhasePct = Math.round(day.moonphase * 100);
+      const cloudcoverList: number[] = [];
+
+      // Calculate cloud cover based on hours of night only.
+      for (const hour of day.hours) {
+        if (hour.datetime < day.sunrise || hour.datetime > day.sunset)
+          cloudcoverList.push(hour.cloudcover);
+      }
+
+      const cloudCover =
+        cloudcoverList.reduce((acc, val) => acc + val) / cloudcoverList.length;
+
+      // For calculating the night period, use the next day’s sunrise.
+      let moonless = calculateMoonlessPeriod(day, arr[index + 1]);
+
+      return `📅 **${dateStr}**
+- 🌅 Sunrise: ${day.sunrise}
+- ☀️ Sunset: ${day.sunset}
+- 🌙 Moon Phase: ${getMoonPhase(day.moonphase)} (${moonPhasePct}%)
+- 🌅 Moonrise: ${day.moonrise || 'N/A'}
+- 🌄 Moonset: ${day.moonset || 'N/A'}
+- ☁️ Avg. Cloud Cover (night): ${cloudCover.toFixed(0)}%
+- 🌌 Moonless Night: ${moonless}`;
+    })
+    .slice(0, 7)
+    .join('\n\n');
+
+  const text = `🌙 **Moon Forecast for the Week** 🌙\n\n${days}`;
+
+  return {
+    content: text,
+  };
 };
+
+/**
+ * Calculates the total duration of moonless time during the night.
+ * The night is defined as the period from currentDay.sunset to nextDay.sunrise.
+ */
+function calculateMoonlessPeriod(
+  currentDay: DayData,
+  nextDay: DayData,
+): string {
+  // Define the night period: from current day's sunset to next day's sunrise.
+  const nightStart = new Date(`${currentDay.datetime}T${currentDay.sunset}`);
+  const nightEnd = new Date(`${nextDay.datetime}T${nextDay.sunrise}`);
+
+  let moonriseDate: Date;
+  if (currentDay.moonrise) {
+    // Parse current day's moonrise.
+    moonriseDate = new Date(`${currentDay.datetime}T${currentDay.moonrise}`);
+    // If this moonrise occurs before sunset, assume it actually happens after midnight.
+    if (moonriseDate < nightStart) {
+      moonriseDate = new Date(`${nextDay.datetime}T${currentDay.moonrise}`);
+    }
+  } else if (nextDay.moonrise) {
+    // If current day has no moonrise, use the next day's moonrise.
+    moonriseDate = new Date(`${nextDay.datetime}T${nextDay.moonrise}`);
+    // In rare cases, if the next day's moonrise is before nightStart, fall back.
+    if (moonriseDate < nightStart) {
+      moonriseDate = nightStart;
+    }
+  } else {
+    // Fallback if no moonrise info is available.
+    moonriseDate = nightStart;
+  }
+
+  let moonsetDate: Date;
+  if (currentDay.moonset) {
+    // Parse current day's moonset.
+    moonsetDate = new Date(`${currentDay.datetime}T${currentDay.moonset}`);
+    // If moonset occurs before sunset, assume it occurs after midnight.
+    if (moonsetDate < nightStart) {
+      moonsetDate = new Date(`${nextDay.datetime}T${currentDay.moonset}`);
+    }
+  } else {
+    // If missing, assume the moon remains up until nightEnd.
+    moonsetDate = nightEnd;
+  }
+
+  let moonlessMinutes = 0;
+  // Gap before moonrise (if moonrise is after nightStart).
+  if (moonriseDate > nightStart) {
+    moonlessMinutes += (moonriseDate.getTime() - nightStart.getTime()) / 60000;
+  }
+  // Gap after moonset (if moonset is before nightEnd).
+  if (moonsetDate < nightEnd) {
+    moonlessMinutes += (nightEnd.getTime() - moonsetDate.getTime()) / 60000;
+  }
+
+  if (moonlessMinutes <= 0) {
+    return 'None';
+  }
+
+  const hours = Math.floor(moonlessMinutes / 60);
+  const minutes = Math.round(moonlessMinutes % 60);
+  return `${hours}h ${minutes}m`;
+}
+
+function getMoonPhase(phase: number): string {
+  if (phase === 0 || phase === 1) return 'New Moon';
+  if (phase < 0.25) return '🌒 Waxing Crescent';
+  if (phase === 0.25) return '🌓 First Quarter';
+  if (phase < 0.5) return '🌔 Waxing Gibbous';
+  if (phase === 0.5) return '🌕 Full Moon';
+  if (phase < 0.75) return '🌖 Waning Gibbous';
+  if (phase === 0.75) return '🌗 Last Quarter';
+  return '🌘 Waning Crescent';
+}
 
 export const setUserTimezone = async (user: User, timezoneStr: string) => {
   const [timezone] = await Timezone.findOrCreate({

@@ -10,6 +10,9 @@ import {
 import config from '../config';
 import * as commands from './commands';
 import { Sequelize } from 'sequelize';
+import { Timezone } from '../database/models/Timezone';
+import { User } from '../database/models/User';
+import { createForecast, formatForecast } from '../lib';
 
 type Command = (
   interaction: ChatInputCommandInteraction,
@@ -28,6 +31,8 @@ export default class MoonForecastBot extends Client {
 
   private _sequelize: Sequelize;
 
+  private _currentHour: number;
+
   constructor(sequelize: Sequelize) {
     super({
       intents: [],
@@ -37,10 +42,52 @@ export default class MoonForecastBot extends Client {
 
     this._sequelize = sequelize;
 
+    this._currentHour = new Date().getHours();
+
     this._init();
   }
 
+  // Every hour check if there are users where
+  // it has just turned to a new day.
   private async _checkForecast() {
+    const newHour = new Date().getHours();
+
+    if (this._currentHour === newHour) return;
+
+    this._currentHour = newHour;
+
+    const timezones = await Timezone.findAll();
+
+    for (const timezone of timezones) {
+      const date = new Date();
+      const time = date.toLocaleTimeString('en-US', {
+        timeZone: timezone.name,
+        hour: '2-digit',
+      });
+
+      const localHour = Number(time.split(' ')[0]);
+
+      // It is not a new day for this timezone yet.
+      if (localHour !== 0) continue;
+
+      const users = await User.findAll({
+        where: {
+          timezone_id: timezone.id,
+        },
+      });
+
+      console.log(`Sending notification to ${timezone.name}`);
+
+      for (const user of users) {
+        const discordUser = await this.users.fetch(user.discord_id);
+
+        const forecast = await createForecast(user.coordinates);
+
+        const formatted = formatForecast(forecast);
+
+        await discordUser.send({ content: formatted.content });
+      }
+    }
   }
 
   // Initialize the forecast timer. Check every 10 seconds.
