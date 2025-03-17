@@ -3,6 +3,7 @@ import { point, User } from '../database/models/User';
 import { EmbedBuilder, InteractionReplyOptions } from 'discord.js';
 import { Timezone } from '../database/models/Timezone';
 import config from '../config';
+import SunCalc from 'suncalc';
 
 interface DayData {
   datetime: string;
@@ -69,6 +70,7 @@ export const formatForecast = (
         day: 'numeric',
         year: 'numeric',
       });
+
       const moonPhasePct = Math.round(day.moonphase * 100);
       const cloudcoverList: number[] = [];
 
@@ -81,12 +83,34 @@ export const formatForecast = (
       const cloudCover =
         cloudcoverList.reduce((acc, val) => acc + val) / cloudcoverList.length;
 
+      const date = new Date(day.datetime);
+
+      date.setDate(date.getDate() + 1);
+
+      const { night, nightEnd } = SunCalc.getTimes(
+        date,
+        forecast.latitude,
+        forecast.longitude,
+      );
+
+      const timeOptions: Intl.DateTimeFormatOptions = {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      };
+
       // For calculating the night period, use the next day’s sunrise.
-      let moonless = calculateMoonlessPeriod(day, arr[index + 1]);
+      let moonless = calculateMoonlessPeriod(
+        day,
+        arr[index + 1],
+        night,
+        nightEnd,
+      );
 
       return `📅 **${dateStr}**
-- 🌅 Sunrise: ${day.sunrise}
-- ☀️ Sunset: ${day.sunset}
+- 🌇 Astro Dusk: ${night.toLocaleTimeString('en-US', timeOptions)}
+- 🌅 Astro Dawn: ${nightEnd.toLocaleTimeString('en-US', timeOptions)}
 - 🌙 Moon Phase: ${getMoonPhase(day.moonphase)} (${moonPhasePct}%)
 - 🌅 Moonrise: ${day.moonrise || 'N/A'}
 - 🌄 Moonset: ${day.moonset || 'N/A'}
@@ -103,17 +127,13 @@ export const formatForecast = (
   };
 };
 
-/**
- * Calculates the total duration of moonless time during the night.
- * The night is defined as the period from currentDay.sunset to nextDay.sunrise.
- */
 function calculateMoonlessPeriod(
   currentDay: DayData,
   nextDay: DayData,
+  nightStart: Date,
+  nightEnd: Date,
 ): string {
-  // Define the night period: from current day's sunset to next day's sunrise.
-  const nightStart = new Date(`${currentDay.datetime}T${currentDay.sunset}`);
-  const nightEnd = new Date(`${nextDay.datetime}T${nextDay.sunrise}`);
+  nightEnd.setDate(nightEnd.getDate() + 1);
 
   let moonriseDate: Date;
   if (currentDay.moonrise) {
@@ -148,6 +168,8 @@ function calculateMoonlessPeriod(
     moonsetDate = nightEnd;
   }
 
+  console.log(moonriseDate, moonsetDate, nightStart, nightEnd);
+
   let moonlessMinutes = 0;
   // Gap before moonrise (if moonrise is after nightStart).
   if (moonriseDate > nightStart) {
@@ -162,8 +184,14 @@ function calculateMoonlessPeriod(
     return 'None';
   }
 
-  const hours = Math.floor(moonlessMinutes / 60);
-  const minutes = Math.round(moonlessMinutes % 60);
+  let hours = Math.floor(moonlessMinutes / 60);
+  let minutes = Math.round(moonlessMinutes % 60);
+
+  if (minutes === 60) {
+    hours++;
+    minutes = 0;
+  }
+
   return `${hours}h ${minutes}m`;
 }
 

@@ -107,8 +107,6 @@ export default class MoonForecastBot extends Client {
 
     const incomingCommand = interaction as ChatInputCommandInteraction;
 
-    console.log('Interaction received:', incomingCommand);
-
     const command = this._commands[incomingCommand.commandName];
 
     console.log('Command name:', incomingCommand.commandName);
